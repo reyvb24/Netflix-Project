@@ -1,2 +1,2 @@
-# Netflix-Project
-A project we are doing for COMP3359, a course offered by HKU.
+# netflix
+A Netflix recommendation system for COMP3359 group project

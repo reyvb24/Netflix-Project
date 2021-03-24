@@ -1,0 +1,123 @@
+---
+title: "COMP3359"
+author: "Buntoro Reynard Verill & Andrianto Reno"
+date: "3/11/2021"
+output: 
+  html_document:
+    df_print: paged
+    highlight: breezedark
+    theme: cosmo
+    toc: yes
+    toc_float:
+      collapsed: no
+    css: assets/style.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = "center", out.width = "80%")
+options(scipen = 99)
+```
+
+
+<style>
+body {
+text-align: justify}
+</style>
+
+# Objectives
+
+In this project, we aim to implement a proper movie recommendation system for customers using the data frame provided by netflix back in 2005 for its prize competition. Here, we will supplement suitable data pre-processing methods, data explorations, and data visualizations to ultimately aid the readers of this report in understanding the work-flow of our project, which finally leads to the development of our models, complemented with various error analysis, and suggestions for improvements.
+
+# Libraries
+
+Firstly, we import some of the necessary packages for the development of our project and deployment of suitable models.
+
+```{r cars}
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(glue)
+library(scales)
+```
+
+# Data Reading
+
+In this section we will read the data into our IDE (i.e. in our case, to RStudio).
+
+```{r pressure, echo=FALSE}
+data <- read.csv("data_input/combined_data_1.txt", header = FALSE, sep = ",")
+data <- data %>% rename(customer_id = V1,
+                        rating = V2,
+                        date = V3) %>% 
+  mutate(date = as.Date(date))
+data %>% head()
+dim(data)
+```
+
+```{r}
+data <- data %>% mutate(movie_id = NA)
+data
+```
+
+```{r}
+write.csv(data, "new_data_1.csv")
+```
+
+
+
+```{r}
+data2 <- read.csv("data_input/combined_data_2.txt", header = FALSE, sep = ",")
+
+```
+
+
+# Data Pre-processing {.tabset}
+
+## Data inspection
+```{r}
+data_summary <- data %>% 
+  group_by(rating)  %>% 
+  count(rating)
+data_summary
+```
+
+```{r}
+total_movies <- data.frame(t(colSums(is.na(data))))[1,2]
+total_movies
+```
+
+```{r}
+customers <- nrow(table(unique(data$customer_id)))-total_movies
+customers
+```
+
+
+```{r}
+levels(data_summary$rating)
+```
+
+
+```{r}
+label_percent <- label_dollar(suffix = '%' ,prefix = '')
+data_summary <- data_summary %>% mutate(rating = as.factor(rating))
+data_summary <- na.omit(data_summary)
+data_summary$prob <- data_summary$n/sum(data_summary$n)*100
+data_summary <- data_summary %>% 
+  mutate(tooltip = glue("distribution: {label_percent(prob)}"))
+data_summary
+```
+
+# Data Visualization
+
+```{r}
+data_sum_graph <- ggplot(data_summary, aes(x = rating, y = prob, text = tooltip, fill = prob)) +
+  geom_col(position = "identity") +
+  labs(title = "Probability Distribution of Movie Ratings",
+       subtitle = paste("For data set 1 (", total_movies, " movies, ", customers, " customers, and ", nrow(data$rating), " ratings"),
+       x = "Movie rating",
+       y = "Probability") +
+  scale_fill_gradient(low = "#e4333e", high = "#52171a") +
+  theme_minimal() 
+ggplotly(data_sum_graph, tooltip = c("text"))
+```
+
