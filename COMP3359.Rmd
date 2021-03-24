@@ -45,50 +45,40 @@ library(scales)
 In this section we will read the data into our IDE (i.e. in our case, to RStudio).
 
 ```{r pressure, echo=FALSE}
-data <- read.csv("data_input/combined_data_1.txt", header = FALSE, sep = ",")
-data <- data %>% rename(customer_id = V1,
-                        rating = V2,
-                        date = V3) %>% 
-  mutate(date = as.Date(date))
-data %>% head()
-dim(data)
-```
-
-```{r}
-data <- data %>% mutate(movie_id = NA)
+data <- read.csv("data_input/data.csv", header = FALSE)
 data
 ```
 
 ```{r}
-write.csv(data, "new_data_1.csv")
+data <- data %>% rename(movie_id = V1,
+                        customer_id = V2,
+                        rating = V3,
+                        date = V4
+                        ) %>% 
+  mutate(date = as.Date(date)) %>% 
+  mutate(rating = as.factor(rating))
+
+data %>% head()
 ```
-
-
 
 ```{r}
-data2 <- read.csv("data_input/combined_data_2.txt", header = FALSE, sep = ",")
-
+dim(data)
 ```
 
+```{r}
+colSums(is.na(data))
+```
 
 # Data Pre-processing {.tabset}
+
 
 ## Data inspection
 ```{r}
 data_summary <- data %>% 
   group_by(rating)  %>% 
-  count(rating)
+  count(rating) %>% 
+  mutate(rating = as.factor(rating))
 data_summary
-```
-
-```{r}
-total_movies <- data.frame(t(colSums(is.na(data))))[1,2]
-total_movies
-```
-
-```{r}
-customers <- nrow(table(unique(data$customer_id)))-total_movies
-customers
 ```
 
 
@@ -107,17 +97,34 @@ data_summary <- data_summary %>%
 data_summary
 ```
 
-# Data Visualization
+## Data Visualization
 
 ```{r}
 data_sum_graph <- ggplot(data_summary, aes(x = rating, y = prob, text = tooltip, fill = prob)) +
   geom_col(position = "identity") +
   labs(title = "Probability Distribution of Movie Ratings",
-       subtitle = paste("For data set 1 (", total_movies, " movies, ", customers, " customers, and ", nrow(data$rating), " ratings"),
+       subtitle = paste("For data set 1 (", unique(data$movie_id), " movies, ", unique(data$customers), " customers, and ", nrow(data$rating), " ratings"),
        x = "Movie rating",
        y = "Probability") +
   scale_fill_gradient(low = "#e4333e", high = "#52171a") +
   theme_minimal() 
 ggplotly(data_sum_graph, tooltip = c("text"))
 ```
+
+# Model Training {.tabset}
+
+```{r}
+data %>% 
+  group_by(customer_id)
+```
+
+
+## Collaborative Filtering
+
+```{r}
+
+```
+
+
+## R Pearson's Correlation
 
