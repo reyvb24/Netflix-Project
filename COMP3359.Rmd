@@ -162,14 +162,23 @@ combined_light
 ```
 
 ```{r}
-dim(combined_light)
+movie_titles <- read.csv("data_input/movie_titles.csv", header = FALSE)
+movie_titles %>% head()
+```
+```{r}
+movie_titles <- movie_titles %>% rename(movie_id = V1,
+                                        year_released = V2,
+                                        title = V3)
+
+combined_light <- inner_join(combined_light, movie_titles %>% mutate_at(c("movie_id", "year_released"), as.numeric), by = "movie_id")
+combined_light %>% head()
 ```
 
 
 ```{r}
-library(keras)
-initializer <- initializer_random_normal(seed = 100)
+dim(combined_light)
 ```
+
 
 ```{r}
 length(unique(combined_light$customer_id))
@@ -192,20 +201,10 @@ set.seed(3359)
 
 index <- sample(1:nrow(combined_light), nrow(combined_light)*0.9)
 
-training <- combined_light[index, ]
-validation <- combined_light[-index,]
+x_train <- combined_light %>% select(c(customer_id_dense, movie_id_dense)) %>% as.matrix()
+x_train %>% head()
 
-x_train <- training %>% select(c(customer_id_dense, movie_id_dense))
-row.names(x_train) <- NULL
-x_train <- x_train %>% as.matrix()
-
-y_train <- training %>% pull(rating)
-
-x_val <- validation %>% select(c(customer_id_dense, movie_id_dense)) %>% as.matrix()
-row.names(x_val) <- NULL
-x_val <- x_val %>% as.matrix()
-
-y_val <- validation %>% select(rating) %>% as.matrix()
+y_train <- combined_light %>% pull(rating)
 ```
 
 ```{r}
@@ -277,8 +276,49 @@ history <- model %>% fit(
 ```
 
 ```{r}
-history %>% 
+plot(history)
 ```
+
+```{r}
+history_light <- model %>% fit(
+  x = list(
+    combined_light[, "customer_id_dense", drop = FALSE],
+    combined_light[, "movie_id_dense", drop = FALSE]
+  ),
+  y = combined_light[, "rating"],
+  epochs = 5,
+  batch_size = 32, 
+  validation_split = 0.2,
+  callbacks = list(callback_early_stopping(patience = 2))
+)
+```
+```
+
+
+```{r}
+movie_embeddings <- model %>%
+  get_layer("movie_embeddings") %>% 
+  get_weights() %>%
+  .[[1]]
+```
+
+
+```{r}
+titles_train <- combined_light[index,] %>% 
+  select(movie_id_dense, title)
+
+titles <- titles_train %>%
+  select(movie_id_dense, title) %>%
+  distinct() %>%
+  arrange(movie_id_dense) %>%
+  mutate(title = title %>% str_remove("\\(.+\\)") %>% str_trim())
+
+row.names(movie_embeddings) <- titles$title
+
+movie_embeddings[1:10, 1:4]
+```
+
+
 
 ## Collaborative Filtering
 
