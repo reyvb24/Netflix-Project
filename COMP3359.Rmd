@@ -38,6 +38,11 @@ library(ggplot2)
 library(plotly)
 library(glue)
 library(scales)
+library(recommenderlab)
+library(dplyr)
+library(recosystem)
+library(tensorflow)
+library(keras)
 ```
 
 # Data Reading
@@ -60,6 +65,18 @@ data <- data %>% rename(movie_id = V1,
 
 data %>% head()
 ```
+
+
+```{r}
+length(unique(data$movie_id))
+```
+
+```{r}
+length(unique(data$customer_id))
+```
+
+
+
 
 ```{r}
 dim(data)
@@ -114,10 +131,154 @@ ggplotly(data_sum_graph, tooltip = c("text"))
 # Model Training {.tabset}
 
 ```{r}
-data %>% 
-  group_by(customer_id)
+top_users <- data %>% 
+  group_by(customer_id) %>% 
+  count(rating)
+top_users <- top_users %>% 
+  group_by(customer_id) %>% 
+  summarise(n = sum(n))
+top_users <- top_users[order(-top_users$n), ] %>% 
+  top_n(10000)
+top_users
 ```
 
+```{r}
+top_movies <- data %>% 
+  group_by(movie_id) %>% 
+  count(rating)
+top_movies <- top_movies %>% 
+  group_by(movie_id) %>% 
+  summarise(n = sum(n))
+top_movies <- top_movies[order(-top_users$n), ] %>% 
+  top_n(2000)
+top_movies
+```
+
+```{r}
+combined_light <- inner_join(data, group, by = "customer_id")
+combined_light <- inner_join(combined_light, top_users, by = "movie_id")
+
+combined_light
+```
+
+```{r}
+dim(combined_light)
+```
+
+
+```{r}
+library(keras)
+initializer <- initializer_random_normal(seed = 100)
+```
+
+```{r}
+length(unique(combined_light$customer_id))
+```
+
+```{r}
+n_movies <- combined_light %>% select(movie_id) %>% distinct() %>% nrow()
+n_users <- combined_light %>% select(customer_id) %>% distinct() %>% nrow()
+```
+
+```{r}
+dense_movies <- combined_light %>% select(movie_id) %>% distinct() %>% rowid_to_column()
+combined_light <- combined_light %>% inner_join(dense_movies) %>% rename(movie_id_dense = rowid)
+dense_customer <- combined_light %>% select(customer_id) %>% distinct %>% rowid_to_column()
+combined_light <- combined_light %>% inner_join(dense_customer) %>% rename(customer_id_dense = rowid)
+```
+
+```{r}
+set.seed(3359)
+
+index <- sample(1:nrow(combined_light), nrow(combined_light)*0.9)
+
+training <- combined_light[index, ]
+validation <- combined_light[-index,]
+
+x_train <- training %>% select(c(customer_id_dense, movie_id_dense))
+row.names(x_train) <- NULL
+x_train <- x_train %>% as.matrix()
+
+y_train <- training %>% pull(rating)
+
+x_val <- validation %>% select(c(customer_id_dense, movie_id_dense)) %>% as.matrix()
+row.names(x_val) <- NULL
+x_val <- x_val %>% as.matrix()
+
+y_val <- validation %>% select(rating) %>% as.matrix()
+```
+
+```{r}
+dim(x_train)
+```
+
+
+```{r}
+embedding_dim <- 64
+
+input_users <- layer_input(shape = 1, name = "users")
+input_movies <- layer_input(shape = 1, name = "movies")
+
+user_embeddings <- input_users %>% 
+  layer_embedding(
+    input_dim = n_users+1,
+    output_dim = embedding_dim,
+    name = "user_embeddings"
+  ) 
+
+movie_embeddings <- input_movies %>% 
+  layer_embedding(
+    input_dim = n_movies+1,
+    output_dim = embedding_dim,
+    name = "movie_embeddings"
+  ) 
+
+```
+
+```{r}
+dot <- layer_dot(
+  inputs = list(user_embeddings, movie_embeddings),
+  axes = 2,
+  name = "dot_product"
+  )
+
+pred <- dot %>% layer_dense(
+  units = 1, 
+  activation = "relu",
+  name = "rating_prediction"
+  )
+```
+
+```{r}
+model <- keras_model(inputs = c(input_users, input_movies), outputs = pred)
+
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "mse",
+  metric = "mae"
+)
+
+summary(model)
+```
+
+
+```{r}
+history <- model %>% fit(
+  x = list(
+    x_train[, "customer_id_dense", drop = FALSE],
+    x_train[, "movie_id_dense", drop = FALSE]
+  ),
+  y = y_train,
+  epochs = 5,
+  batch_size = 32, 
+  validation_split = 0.2,
+  callbacks = list(callback_early_stopping(patience = 2))
+)
+```
+
+```{r}
+history %>% 
+```
 
 ## Collaborative Filtering
 
