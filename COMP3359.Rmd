@@ -139,7 +139,11 @@ top_users <- top_users %>%
   summarise(n = sum(n))
 top_users <- top_users[order(-top_users$n), ] %>% 
   top_n(10000)
-top_users
+dim(top_users %>% top_n(10000))
+```
+
+```{r}
+top_users %>% tail(10)
 ```
 
 ```{r}
@@ -155,8 +159,8 @@ top_movies
 ```
 
 ```{r}
-combined_light <- inner_join(data, group, by = "customer_id")
-combined_light <- inner_join(combined_light, top_users, by = "movie_id")
+combined_light <- inner_join(data, top_users, by = "customer_id")
+combined_light <- inner_join(combined_light, top_movies, by = "movie_id")
 
 combined_light
 ```
@@ -275,23 +279,9 @@ history <- model %>% fit(
 )
 ```
 
-```{r}
-plot(history)
-```
 
 ```{r}
-history_light <- model %>% fit(
-  x = list(
-    combined_light[, "customer_id_dense", drop = FALSE],
-    combined_light[, "movie_id_dense", drop = FALSE]
-  ),
-  y = combined_light[, "rating"],
-  epochs = 5,
-  batch_size = 32, 
-  validation_split = 0.2,
-  callbacks = list(callback_early_stopping(patience = 2))
-)
-```
+plot(history)
 ```
 
 
@@ -299,26 +289,100 @@ history_light <- model %>% fit(
 movie_embeddings <- model %>%
   get_layer("movie_embeddings") %>% 
   get_weights() %>%
-  .[[1]]
+  .[[1]] 
+dim(movie_embeddings)
+movie_embeddings <- movie_embeddings[1:2000, ]
 ```
 
 
 ```{r}
-titles_train <- combined_light[index,] %>% 
-  select(movie_id_dense, title)
-
-titles <- titles_train %>%
+titles <- combined_light %>%
   select(movie_id_dense, title) %>%
   distinct() %>%
   arrange(movie_id_dense) %>%
   mutate(title = title %>% str_remove("\\(.+\\)") %>% str_trim())
-
+dim(titles)
 row.names(movie_embeddings) <- titles$title
 
 movie_embeddings[1:10, 1:4]
 ```
 
+```{r}
+n_words_to_plot <- 200
 
+tsne <- Rtsne::Rtsne(
+  X = movie_embeddings[1:n_words_to_plot,], 
+  perplexity = 30, 
+  pca = FALSE
+  )
+
+p <- tsne$Y %>%
+  as.data.frame() %>%
+  mutate(word = row.names(movie_embeddings)[1:n_words_to_plot]) %>%
+  ggplot(aes(x = V1, y = V2, label = word)) + 
+  geom_text(size = 3)
+
+plotly::ggplotly(p)
+```
+
+```{r}
+original_customer_id <- 53
+new_customer_id <- original_customer_id - 1
+
+# get movies watched by our user
+movies_watched <- combined_light %>%
+  filter(customer_id_dense == new_customer_id) %>% 
+  pull(movie_id_dense)
+
+# get all available movies
+all_movies <- combined_light %>% 
+  distinct(movie_id_dense) %>%
+  pull()
+
+# identify movies not watched
+movies_not_watched <- setdiff(all_movies, movies_watched)
+
+movie_options <- combined_light %>%
+  filter(movie_id_dense %in% movies_not_watched) %>%
+  distinct(movie_id_dense, title)
+
+movie_options
+```
+
+```{r}
+customer_options <- expand.grid(
+  user_id = new_customer_id, 
+  movie_id_dense= movies_not_watched
+  ) %>%
+  as.matrix()
+
+head(customer_options)
+```
+
+```{r}
+inputs <- list(
+  customer_options[, "user_id", drop = FALSE],
+  customer_options[, "movie_id_dense", drop = FALSE]
+  )
+
+pred <- model %>% predict(inputs)
+
+head(pred)
+```
+
+```{r}
+combined_light %>% 
+  filter(movie_id_dense %in% movies_watched) %>%
+  distinct(movie_id_dense, title)
+```
+
+```{r}
+customer_options %>%
+  as_tibble() %>%
+  mutate(predictions = as.vector(pred)) %>%
+  left_join(movie_options, by = "movie_id_dense") %>%
+  arrange(desc(predictions))
+```
 
 ## Collaborative Filtering
 
