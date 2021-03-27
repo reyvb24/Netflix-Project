@@ -326,7 +326,7 @@ plotly::ggplotly(p)
 ```
 
 ```{r}
-original_customer_id <- 53
+original_customer_id <- 1000
 new_customer_id <- original_customer_id - 1
 
 # get movies watched by our user
@@ -382,6 +382,10 @@ customer_options %>%
   mutate(predictions = as.vector(pred)) %>%
   left_join(movie_options, by = "movie_id_dense") %>%
   arrange(desc(predictions))
+```
+
+```{r}
+saveRDS(model, "model_netflix.rds")
 ```
 
 ## Collaborative Filtering
