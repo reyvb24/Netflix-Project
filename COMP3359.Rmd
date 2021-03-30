@@ -47,13 +47,14 @@ library(keras)
 
 # Data Reading
 
-In this section, we will read the data into our IDE (i.e. in our case, to RStudio). However, we have done some slight modification towards the previously cluttered data using jupyter notebook and managed to obtain the V1 column which is used for storing the movie id which will be our input data in this case.
+
+# Data Pre-processing
+
+In this section, we will re-read the data into our IDE (i.e. in our case, to RStudio). 
 
 ```{r pressure, echo=FALSE}
 data <- read.csv("data_input/data.csv", header = FALSE)
 ```
-
-# Data Pre-processing
 
 In this second section, we are trying better understand the current state of our data, and determine whether we would need to further transform our data due to underlying problems such as redundant data, out of range values, etc.
 
@@ -100,20 +101,17 @@ colSums(is.na(data))
 ```
 
 
-## Data Engineering
+# Feature Engineering {.tabset}
 
-Referring to the definition of data engineering, 
+## Data Transformation
+
+Referring to the definition of 
 ```{r}
 data_summary <- data %>% 
   group_by(rating)  %>% 
   count(rating) %>% 
   mutate(rating = as.factor(rating))
 data_summary
-```
-
-
-```{r}
-levels(data_summary$rating)
 ```
 
 
@@ -170,6 +168,7 @@ top_movies <- top_movies[order(-top_users$n), ] %>%
   top_n(2000)
 top_movies
 ```
+
 
 ```{r}
 combined_light <- inner_join(data, top_users, by = "customer_id")
