@@ -1,0 +1,7 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+data_input/
+.ipynb_checkpoints
+*.csv
