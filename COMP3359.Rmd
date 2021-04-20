@@ -270,8 +270,8 @@ In this section, we are going to build a neural network model using collaborativ
 
 Before diving further into the model building, here we extract some insightful information that is required for the embedding layers' parameters.
 ```{r}
-n_movies <- combined_light %>% select(movie_id) %>% distinct() %>% nrow()
-n_users <- combined_light %>% select(customer_id) %>% distinct() %>% nrow()
+n_movies <- combined_light %>% select(movie_id) %>% n_distinct() 
+n_users <- combined_light %>% select(customer_id) %>% n_distinct()
 ```
 
 Here, we define new indices for each corresponding movie and customers to aid us in the next section of model building (So that the number of customer ids and movie ids are do not seem random).
@@ -280,6 +280,11 @@ dense_movies <- combined_light %>% select(movie_id) %>% distinct() %>% rowid_to_
 combined_light <- combined_light %>% inner_join(dense_movies) %>% rename(movie_id_dense = rowid)
 dense_customer <- combined_light %>% select(customer_id) %>% distinct %>% rowid_to_column()
 combined_light <- combined_light %>% inner_join(dense_customer) %>% rename(customer_id_dense = rowid)
+```
+
+```{r}
+combined_light <- combined_light %>% select(-c("n.x", "n.y", "X"))
+write.csv(combined_light, "combined_lighter")
 ```
 
 After that, we can separate the training data into two counterparts, namely the x axis as the predictor variables, whereas the y axis as the target variable.
@@ -575,5 +580,192 @@ corr.sort_values(ascending = False).head(10)
 x = df['Pulp Fiction']
 corr = df.corrwith(x)
 corr.sort_values(ascending = False).head(10)
+```
+
+# Accounting for Bias
+
+
+```{r}
+nrow(x_train)
+```
+
+```{r}
+n_users
+```
+
+```{r}
+embedding_dim <- 32
+# input layers
+input_users <- layer_input(shape = 1, name = "users")
+input_movies <- layer_input(shape = 1, name = "movies")
+
+user_embeddings <- input_users %>%
+  layer_embedding(
+    input_dim = n_users+1,
+    output_dim = embedding_dim,
+    name = "user_embeddings"
+  )
+
+movie_embeddings <- input_movies %>%
+  layer_embedding(
+    input_dim =n_movies+1,
+    output_dim = embedding_dim,
+    name = "movie_embeddings"
+  )
+
+user_bias <- input_users %>%
+  layer_embedding(
+    input_dim = n_users+1,
+    output_dim = 1,
+    name = "user_bias"
+  ) 
+
+movie_bias <- input_movies %>%
+  layer_embedding(
+    input_dim = n_movies+1,
+    output_dim = 1,
+    name = "movie_bias"
+  ) 
+```
+
+```{r}
+dot <- layer_dot(list(user_embeddings, movie_embeddings), axes = 2, 
+                 name = "dot_product")
+
+dot_bias <- layer_add(list(dot, user_bias, movie_bias), name = "add_bias")
+
+pred <- dot_bias %>% layer_dense(units = 1, activation = "relu", 
+                                 name = "rating_prediction")
+```
+
+```{r}
+# define model inputs/outputs
+model_new <- keras_model(inputs = c(input_users, input_movies), outputs = pred)
+
+model_new %>% compile(
+  optimizer = "rmsprop",
+  loss = "mse",
+  metric = c("mae","mse")
+)
+
+# inspect model
+summary(model_new)
+```
+
+
+```{r}
+history <- model_new %>% fit(
+  x = list(
+    x_train[, "customer_id_dense", drop = FALSE],
+    x_train[, "movie_id_dense", drop = FALSE]
+  ),
+  y = y_train,
+  epochs = 5,
+  batch_size = 512, 
+  validation_split = 0.2,
+  callbacks = list(callback_early_stopping(patience = 2))
+)
+```
+
+```{r}
+plot(history) + geom_line()
+```
+
+```{r}
+save_model_hdf5(model, "model_bias.h5")
+```
+
+```{r}
+model <- load_model_hdf5("model_bias.h5")
+```
+
+```{r}
+model_new %>% evaluate(list(x_validation[,"customer_id_dense", drop = FALSE], x_validation[,"movie_id_dense", drop = FALSE]), y_validation)
+```
+
+
+```{r}
+dot <- layer_dot(list(user_embeddings, movie_embeddings), axes = 2, 
+                 name = "dot_product")
+
+dot_bias <- layer_add(list(dot, user_bias, movie_bias), name = "add_bias")
+
+pred <- dot_bias %>% layer_dense(units = 1, activation = "relu", 
+                                 name = "rating_prediction")
+```
+
+```{r}
+embedding_dim <- 32
+# input layers
+input_movies <- layer_input(shape = 1, name = "movies")
+
+movie_embeddings <- input_movies %>%
+  layer_embedding(
+    input_dim =n_movies+1,
+    output_dim = embedding_dim,
+    name = "movie_embeddings"
+  )
+
+movie_bias <- input_movies %>%
+  layer_embedding(
+    input_dim = n_movies+1,
+    output_dim = 1,
+    name = "movie_bias"
+  ) 
+```
+
+```{r}
+dot <- layer_dot(movie_embeddings, axes = 2, 
+                 name = "dot_product")
+
+dot_bias <- layer_add(list(dot, user_bias, movie_bias), name = "add_bias")
+
+pred <- dot_bias %>% layer_dense(units = 1, activation = "relu", 
+                                 name = "rating_prediction")
+```
+
+```{r}
+# define model inputs/outputs
+model <- keras_model(inputs = c(input_users, input_movies), outputs = pred)
+
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "mse",
+  metric = c("mae","mse")
+)
+
+# inspect model
+summary(model)
+```
+
+```{r}
+model_acc <- keras_model(inputs = c(input_users, input_movies), outputs = pred)
+
+model_acc %>% compile(
+  optimizer = "rmsprop",
+  loss = "mse",
+  metric = c("accuracy")
+)
+
+# inspect model
+summary(model_acc)
+```
+
+```{r}
+history <- model_acc %>% fit(
+  x = list(
+    x_train[, "customer_id_dense", drop = FALSE],
+    x_train[, "movie_id_dense", drop = FALSE]
+  ),
+  y = y_train,
+  epochs = 5,
+  batch_size = 512, 
+  validation_split = 0.2,
+  callbacks = list(callback_early_stopping(patience = 2))
+)
+```
+
+```{r}
+plot(history) + geom_line()
 ```
 
